@@ -2,15 +2,15 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { Supadata } from "@supadata/js";
 
-// Utilisation de pdf-extraction pour la compatibilité Turbopack et Next.js
 const pdf = require("pdf-extraction");
 
-// CONFIGURATION DU SEGMENT POUR NEXT.JS
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 const supadata = new Supadata({
   apiKey: process.env.SUPADATA_API_KEY as string,
@@ -25,112 +25,20 @@ const ALLOWED_FORMATS = [
   "chapters",
 ];
 
-/**
- * Directives structurelles par format
- */
 function getFormatPrompt(format: string, language: string) {
-  const isEn = language === "English";
-  const isEs = language === "Español";
-  const isDe = language === "Deutsch";
-  const isJp = language === "日本語";
-
-  const tags = {
-    literal: isEn
-      ? "LITERAL"
-      : isEs
-      ? "LITERAL"
-      : isDe
-      ? "WÖRTLICH"
-      : isJp
-      ? "直訳"
-      : "LITTÉRALE",
-    forge: isEn
-      ? "FORGE (RECOMMENDED)"
-      : isEs
-      ? "FORJA (RECOMENDADO)"
-      : isDe
-      ? "FORGE (EMPFOHLEN)"
-      : isJp
-      ? "フォージ (推奨)"
-      : "FORGE (RECOMMANDÉ)",
-    actionable: isEn
-      ? "ACTIONABLE"
-      : isEs
-      ? "ACCIONABLE"
-      : isDe
-      ? "HANDLUNGSORIENTIERT"
-      : isJp
-      ? "実行可能"
-      : "ACTIONNABLE",
-    axiom: isEn
-      ? "AXIOM"
-      : isEs
-      ? "AXIOMA"
-      : isDe
-      ? "AXIOM"
-      : isJp
-      ? "公理"
-      : "AXIOME",
-    visual: "action",
-    audio: "audio",
-    screen: "screen",
-    desc: isEn
-      ? "Description"
-      : isEs
-      ? "Descripción"
-      : isDe
-      ? "Beschreibung"
-      : isJp
-      ? "説明"
-      : "Description",
-  };
-
   switch (format) {
     case "citation":
-      return `
-PRODUIS 4 CITATIONS À IMPACT MAXIMUM EN RESPECTANT STRICTEMENT LA LANGUE : ${language}.
-1. [${tags.literal}] : Extrais la phrase la plus prophétique du texte, mot pour mot.
-2. [${tags.forge}] : Transforme une idée majeure en une déclaration d'impact.
-3. [${tags.actionable}] : Une phrase qui pousse à l'action.
-4. [${tags.axiom}] : Une vérité froide de moins de 7 mots.
-`;
-
+      return `Produis 4 citations puissantes en ${language}.`;
     case "thread":
-      return `
-Génère un Thread X (Twitter) de 6 à 8 tweets EN ${language}.
-- TWEET 1 : Hook fort 🧵
-- Tweets suivants : idées structurées
-- Dernier tweet : CTA clair
-`;
-
+      return `Génère un thread X structuré en ${language}.`;
     case "linkedin":
-      return `
-Génère un post LinkedIn expert EN ${language}.
-Hook fort, 3 arguments précis, ton autoritaire.
-`;
-
+      return `Génère un post LinkedIn expert en ${language}.`;
     case "summary":
-      return `
-Génère une synthèse exécutive EN ${language}.
-Clair, dense, structuré.
-`;
-
+      return `Génère une synthèse exécutive en ${language}.`;
     case "script":
-      return `
-MODE : Script vidéo short EN ${language}
-Structure :
-[action]
-[audio]
-[screen]
-`;
-
+      return `Génère un script vidéo short en ${language}.`;
     case "chapters":
-      return `
-MODE : Chapitrage vidéo EN ${language}
-00:00 - Titre
-Description : phrase synthétique
-`;
-
+      return `Génère un chapitrage vidéo en ${language}.`;
     default:
       return "";
   }
@@ -146,7 +54,6 @@ export async function POST(req: Request) {
     const format = formData.get("format") as string;
     const tone = formData.get("tone") as string;
     const target = formData.get("target") as string;
-    const instruction = formData.get("instruction") as string;
     const language =
       (formData.get("language") as string) || "Français";
 
@@ -159,39 +66,28 @@ export async function POST(req: Request) {
 
     let rawText = "";
 
-    // ---------- ÉTAPE 0 : ACQUISITION ----------
+    // ===== ACQUISITION =====
     if (textInput && textInput.trim() !== "") {
       rawText = textInput.trim();
 
     } else if (youtubeUrl && youtubeUrl.trim() !== "") {
 
-      const videoIdMatch = youtubeUrl.match(
-        /(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/
-      );
+      const transcriptResult: any = await supadata.transcript({
+        url: youtubeUrl,
+        text: true,
+        mode: "auto",
+      });
 
-      if (!videoIdMatch) {
-        throw new Error("URL YouTube invalide.");
+      if (transcriptResult?.jobId) {
+        throw new Error("Vidéo trop longue (async non géré).");
       }
 
-      const videoId = videoIdMatch[1];
+      rawText =
+        typeof transcriptResult === "string"
+          ? transcriptResult
+          : transcriptResult?.text || "";
 
-     const transcriptResult: any = await (supadata as any).youtube.transcript({
-    videoId: videoId,
-    text: true,
-    mode: "auto",
-  });
-
-  if (transcriptResult?.jobId) {
-    throw new Error("Vidéo trop longue (async non géré).");
-  }
-
-  if (typeof transcriptResult === "string") {
-    rawText = transcriptResult;
-  } else {
-    rawText = transcriptResult?.text || "";
-  }
-
-  rawText = rawText.trim();
+      rawText = rawText.trim();
 
     } else if (file) {
 
@@ -230,7 +126,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // ---------- ÉTAPE 1 : EXTRACTION ----------
+    // ===== EXTRACTION =====
     const extraction =
       await openai.chat.completions.create({
         model: "gpt-4o",
@@ -248,7 +144,7 @@ export async function POST(req: Request) {
       extraction.choices[0].message.content?.trim() ||
       "";
 
-    // ---------- ÉTAPE 2 : GÉNÉRATION ----------
+    // ===== GÉNÉRATION =====
     const generation =
       await openai.chat.completions.create({
         model: "gpt-4o",
@@ -285,12 +181,9 @@ ${getFormatPrompt(format, language)}
 
   } catch (error: any) {
     console.error("Erreur génération moteur:", error);
+
     return NextResponse.json(
-      {
-        error:
-          error.message ||
-          "Erreur interne du serveur",
-      },
+      { error: String(error) }, // 🔥 force l'erreur réelle à remonter
       { status: 500 }
     );
   }
