@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
-// Utilisation de pdf-extraction pour la compatibilité Turbopack et Next.js
+// Utilisation de pdf-extraction
 const pdf = require("pdf-extraction");
 
-// CONFIGURATION DU SEGMENT POUR NEXT.JS
-export const maxDuration = 300; 
+// CONFIGURATION NEXT
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -20,72 +20,20 @@ const ALLOWED_FORMATS = [
   "chapters"
 ];
 
-/**
- * Directives structurelles par format
- */
 function getFormatPrompt(format: string, language: string) {
-  const isEn = language === "English";
-  const isEs = language === "Español";
-  const isDe = language === "Deutsch";
-  const isJp = language === "日本語";
-  
-  const tags = {
-    literal: isEn ? "LITERAL" : isEs ? "LITERAL" : isDe ? "WÖRTLICH" : isJp ? "直訳" : "LITTÉRALE",
-    forge: isEn ? "FORGE (RECOMMENDED)" : isEs ? "FORJA (RECOMENDADO)" : isDe ? "FORGE (EMPFOHLEN)" : isJp ? "フォージ (推奨)" : "FORGE (RECOMMANDÉ)",
-    actionable: isEn ? "ACTIONABLE" : isEs ? "ACCIONABLE" : isDe ? "HANDLUNGSORIENTIERT" : isJp ? "実行可能" : "ACTIONNABLE",
-    axiom: isEn ? "AXIOM" : isEs ? "AXIOMA" : isDe ? "AXIOM" : isJp ? "公理" : "AXIOME",
-    visual: "action", 
-    audio: "audio",
-    screen: "screen",
-    desc: isEn ? "Description" : isEs ? "Descripción" : isDe ? "Beschreibung" : isJp ? "説明" : "Description"
-  };
-
   switch (format) {
     case "citation":
-      return `
-PRODUIS 4 CITATIONS À IMPACT MAXIMUM EN RESPECTANT STRICTEMENT LA LANGUE : ${language}.
-1. [${tags.literal}] : Extrais la phrase la plus prophétique du texte, mot pour mot.
-2. [${tags.forge}] : Transforme une idée majeure en une déclaration d'impact.
-3. [${tags.actionable}] : Une phrase qui pousse à l'action.
-4. [${tags.axiom}] : Une vérité froide de moins de 7 mots.
-`;
-
+      return `Produis 4 citations puissantes en ${language}.`;
     case "thread":
-      return `
-Génère un Thread X (Twitter) de 6 à 8 tweets EN ${language}.
-- TWEET 1 : Hook fort 🧵
-- Tweets suivants : idées structurées
-- Dernier tweet : CTA clair
-`;
-
+      return `Génère un thread X structuré en ${language}.`;
     case "linkedin":
-      return `
-Génère un post LinkedIn expert EN ${language}.
-Hook fort, 3 arguments précis, ton autoritaire.
-`;
-
+      return `Génère un post LinkedIn expert en ${language}.`;
     case "summary":
-      return `
-Génère une synthèse exécutive EN ${language}.
-Clair, dense, structuré.
-`;
-
+      return `Génère une synthèse exécutive en ${language}.`;
     case "script":
-      return `
-MODE : Script vidéo short EN ${language}
-Structure :
-[action]
-[audio]
-[screen]
-`;
-
+      return `Génère un script vidéo short en ${language}.`;
     case "chapters":
-      return `
-MODE : Chapitrage vidéo EN ${language}
-00:00 - Titre
-Description : phrase synthétique
-`;
-
+      return `Génère un chapitrage vidéo en ${language}.`;
     default:
       return "";
   }
@@ -101,7 +49,6 @@ export async function POST(req: Request) {
     const format = formData.get("format") as string;
     const tone = formData.get("tone") as string;
     const target = formData.get("target") as string;
-    const instruction = formData.get("instruction") as string;
     const language = (formData.get("language") as string) || "Français";
 
     if (!ALLOWED_FORMATS.includes(format)) {
@@ -110,11 +57,14 @@ export async function POST(req: Request) {
 
     let rawText = "";
 
-    // ---------- ÉTAPE 0 : ACQUISITION ----------
+    // ====== ACQUISITION ======
+
     if (textInput && textInput.trim() !== "") {
       rawText = textInput.trim();
 
     } else if (youtubeUrl && youtubeUrl.trim() !== "") {
+
+      console.log("Fetching Supadata transcript for:", youtubeUrl);
 
       const response = await fetch("https://api.supadata.ai/v1/youtube/transcript", {
         method: "POST",
@@ -122,39 +72,51 @@ export async function POST(req: Request) {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${process.env.SUPADATA_API_KEY}`
         },
-        body: JSON.stringify({
-          url: youtubeUrl
-        })
+        body: JSON.stringify({ url: youtubeUrl })
       });
 
+      const rawResponse = await response.text();
+      console.log("Supadata raw response:", rawResponse);
+
       if (!response.ok) {
-        throw new Error("Erreur récupération transcript YouTube");
+        throw new Error(`Supadata HTTP ${response.status} - ${rawResponse}`);
       }
 
-      const data = await response.json();
+      const data = JSON.parse(rawResponse);
       rawText = data.text?.trim() || "";
 
     } else if (file) {
+
       const buffer = Buffer.from(await file.arrayBuffer());
 
       if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
         const pdfData = await pdf(buffer);
         rawText = pdfData.text?.trim() || "";
       } else {
-        const audioFile = new File([file], "input.wav", { type: file.type || "audio/wav" });
+        const audioFile = new File(
+          [file],
+          "input.wav",
+          { type: file.type || "audio/wav" }
+        );
+
         const transcription = await openai.audio.transcriptions.create({
           file: audioFile,
           model: "whisper-1"
         });
+
         rawText = transcription.text?.trim() || "";
       }
     }
 
     if (!rawText) {
-      return NextResponse.json({ error: "Veuillez fournir du contenu valide." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Veuillez fournir du contenu valide." },
+        { status: 400 }
+      );
     }
 
-    // ---------- ÉTAPE 1 : EXTRACTION ----------
+    // ====== EXTRACTION ======
+
     const extraction = await openai.chat.completions.create({
       model: "gpt-4o",
       temperature: 0,
@@ -169,7 +131,8 @@ export async function POST(req: Request) {
 
     const keyIdeas = extraction.choices[0].message.content?.trim() || "";
 
-    // ---------- ÉTAPE 2 : GÉNÉRATION ----------
+    // ====== GÉNÉRATION ======
+
     const generation = await openai.chat.completions.create({
       model: "gpt-4o",
       temperature: 0.6,
