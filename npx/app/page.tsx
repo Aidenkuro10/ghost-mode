@@ -112,7 +112,7 @@ export default function Home() {
   // CORRECTION MAJEURE ICI : handleForge optimisée pour les vidéos et Vercel
   const handleForge = async (fileToUse?: File) => {
     const file = fileToUse || currentFile;
-    if (!file && !inputText) return;
+    if (!file && !inputText && !youtubeUrl.trim()) return;
     if (loading) return;
 
     setLoading(true);
