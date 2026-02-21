@@ -1,15 +1,20 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { Supadata } from "@supadata/js";
 
 // Utilisation de pdf-extraction pour la compatibilité Turbopack et Next.js
 const pdf = require("pdf-extraction");
 
 // CONFIGURATION DU SEGMENT POUR NEXT.JS
-export const maxDuration = 300; 
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const supadata = new Supadata({
+  apiKey: process.env.SUPADATA_API_KEY as string,
+});
 
 const ALLOWED_FORMATS = [
   "citation",
@@ -17,7 +22,7 @@ const ALLOWED_FORMATS = [
   "linkedin",
   "summary",
   "script",
-  "chapters"
+  "chapters",
 ];
 
 /**
@@ -28,16 +33,56 @@ function getFormatPrompt(format: string, language: string) {
   const isEs = language === "Español";
   const isDe = language === "Deutsch";
   const isJp = language === "日本語";
-  
+
   const tags = {
-    literal: isEn ? "LITERAL" : isEs ? "LITERAL" : isDe ? "WÖRTLICH" : isJp ? "直訳" : "LITTÉRALE",
-    forge: isEn ? "FORGE (RECOMMENDED)" : isEs ? "FORJA (RECOMENDADO)" : isDe ? "FORGE (EMPFOHLEN)" : isJp ? "フォージ (推奨)" : "FORGE (RECOMMANDÉ)",
-    actionable: isEn ? "ACTIONABLE" : isEs ? "ACCIONABLE" : isDe ? "HANDLUNGSORIENTIERT" : isJp ? "実行可能" : "ACTIONNABLE",
-    axiom: isEn ? "AXIOM" : isEs ? "AXIOMA" : isDe ? "AXIOM" : isJp ? "公理" : "AXIOME",
-    visual: "action", 
+    literal: isEn
+      ? "LITERAL"
+      : isEs
+      ? "LITERAL"
+      : isDe
+      ? "WÖRTLICH"
+      : isJp
+      ? "直訳"
+      : "LITTÉRALE",
+    forge: isEn
+      ? "FORGE (RECOMMENDED)"
+      : isEs
+      ? "FORJA (RECOMENDADO)"
+      : isDe
+      ? "FORGE (EMPFOHLEN)"
+      : isJp
+      ? "フォージ (推奨)"
+      : "FORGE (RECOMMANDÉ)",
+    actionable: isEn
+      ? "ACTIONABLE"
+      : isEs
+      ? "ACCIONABLE"
+      : isDe
+      ? "HANDLUNGSORIENTIERT"
+      : isJp
+      ? "実行可能"
+      : "ACTIONNABLE",
+    axiom: isEn
+      ? "AXIOM"
+      : isEs
+      ? "AXIOMA"
+      : isDe
+      ? "AXIOM"
+      : isJp
+      ? "公理"
+      : "AXIOME",
+    visual: "action",
     audio: "audio",
     screen: "screen",
-    desc: isEn ? "Description" : isEs ? "Descripción" : isDe ? "Beschreibung" : isJp ? "説明" : "Description"
+    desc: isEn
+      ? "Description"
+      : isEs
+      ? "Descripción"
+      : isDe
+      ? "Beschreibung"
+      : isJp
+      ? "説明"
+      : "Description",
   };
 
   switch (format) {
@@ -102,10 +147,14 @@ export async function POST(req: Request) {
     const tone = formData.get("tone") as string;
     const target = formData.get("target") as string;
     const instruction = formData.get("instruction") as string;
-    const language = (formData.get("language") as string) || "Français";
+    const language =
+      (formData.get("language") as string) || "Français";
 
     if (!ALLOWED_FORMATS.includes(format)) {
-      return NextResponse.json({ error: "Format invalide." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Format invalide." },
+        { status: 400 }
+      );
     }
 
     let rawText = "";
@@ -116,94 +165,132 @@ export async function POST(req: Request) {
 
     } else if (youtubeUrl && youtubeUrl.trim() !== "") {
 
-      const response = await fetch("https://api.supadata.ai/v1/youtube/transcript", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.SUPADATA_API_KEY}`
-        },
-        body: JSON.stringify({
-          url: youtubeUrl
-        })
-      });
+      const videoIdMatch = youtubeUrl.match(
+        /(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+      );
 
-      if (!response.ok) {
-        throw new Error("Erreur récupération transcript YouTube");
+      if (!videoIdMatch) {
+        throw new Error("URL YouTube invalide.");
       }
 
-      const data = await response.json();
-      rawText = data.text?.trim() || "";
+      const videoId = videoIdMatch[1];
+
+     const transcriptResult: any = await (supadata as any).youtube.transcript({
+    videoId: videoId,
+    text: true,
+    mode: "auto",
+  });
+
+  if (transcriptResult?.jobId) {
+    throw new Error("Vidéo trop longue (async non géré).");
+  }
+
+  if (typeof transcriptResult === "string") {
+    rawText = transcriptResult;
+  } else {
+    rawText = transcriptResult?.text || "";
+  }
+
+  rawText = rawText.trim();
 
     } else if (file) {
-      const buffer = Buffer.from(await file.arrayBuffer());
 
-      if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
+      const buffer = Buffer.from(
+        await file.arrayBuffer()
+      );
+
+      if (
+        file.type === "application/pdf" ||
+        file.name.endsWith(".pdf")
+      ) {
         const pdfData = await pdf(buffer);
         rawText = pdfData.text?.trim() || "";
       } else {
-        const audioFile = new File([file], "input.wav", { type: file.type || "audio/wav" });
-        const transcription = await openai.audio.transcriptions.create({
-          file: audioFile,
-          model: "whisper-1"
-        });
-        rawText = transcription.text?.trim() || "";
+        const audioFile = new File(
+          [file],
+          "input.wav",
+          { type: file.type || "audio/wav" }
+        );
+
+        const transcription =
+          await openai.audio.transcriptions.create({
+            file: audioFile,
+            model: "whisper-1",
+          });
+
+        rawText =
+          transcription.text?.trim() || "";
       }
     }
 
     if (!rawText) {
-      return NextResponse.json({ error: "Veuillez fournir du contenu valide." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Veuillez fournir du contenu valide." },
+        { status: 400 }
+      );
     }
 
     // ---------- ÉTAPE 1 : EXTRACTION ----------
-    const extraction = await openai.chat.completions.create({
-      model: "gpt-4o",
-      temperature: 0,
-      messages: [
-        {
-          role: "system",
-          content: `Analyse le texte et extrais les idées clés en ${language}.`
-        },
-        { role: "user", content: rawText }
-      ]
-    });
+    const extraction =
+      await openai.chat.completions.create({
+        model: "gpt-4o",
+        temperature: 0,
+        messages: [
+          {
+            role: "system",
+            content: `Analyse le texte et extrais les idées clés en ${language}.`,
+          },
+          { role: "user", content: rawText },
+        ],
+      });
 
-    const keyIdeas = extraction.choices[0].message.content?.trim() || "";
+    const keyIdeas =
+      extraction.choices[0].message.content?.trim() ||
+      "";
 
     // ---------- ÉTAPE 2 : GÉNÉRATION ----------
-    const generation = await openai.chat.completions.create({
-      model: "gpt-4o",
-      temperature: 0.6,
-      messages: [
-        {
-          role: "system",
-          content: `
+    const generation =
+      await openai.chat.completions.create({
+        model: "gpt-4o",
+        temperature: 0.6,
+        messages: [
+          {
+            role: "system",
+            content: `
 Langue obligatoire : ${language}
 Cible : ${target || "Audience générale"}
 Ton : ${tone || "Naturel"}
 ${getFormatPrompt(format, language)}
-`
-        },
-        {
-          role: "user",
-          content: format === "chapters"
-            ? `CONTENU ORIGINAL :\n${rawText}`
-            : `SUBSTANCE BRUTE :\n${keyIdeas}`
-        }
-      ]
-    });
+`,
+          },
+          {
+            role: "user",
+            content:
+              format === "chapters"
+                ? `CONTENU ORIGINAL :\n${rawText}`
+                : `SUBSTANCE BRUTE :\n${keyIdeas}`,
+          },
+        ],
+      });
 
-    const output = generation.choices[0].message.content?.trim() || "";
+    const output =
+      generation.choices[0].message.content?.trim() ||
+      "";
 
     return NextResponse.json({
       output,
       transcription: rawText,
-      extractedIdeas: keyIdeas
+      extractedIdeas: keyIdeas,
     });
 
   } catch (error: any) {
     console.error("Erreur génération moteur:", error);
     return NextResponse.json(
-      { error: error.message || "Erreur interne du serveur" },
+      {
+        error:
+          error.message ||
+          "Erreur interne du serveur",
+      },
       { status: 500 }
     );
   }
