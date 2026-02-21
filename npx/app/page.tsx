@@ -135,12 +135,30 @@ export default function Home() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 secondes max
 
-      const res = await fetch("/api/generate", { 
-        method: "POST", 
-        body: formData,
-        signal: controller.signal,
-        cache: 'no-store'
-      });
+      const res = await fetch("/api/start-job", {
+      method: "POST",
+      body: formData,
+    });
+
+    const { jobId } = await res.json();
+
+    // polling
+    const interval = setInterval(async () => {
+      const statusRes = await fetch(`/api/job-status?id=${jobId}`);
+      const data = await statusRes.json();
+
+      if (data.status === "done") {
+        clearInterval(interval);
+        setOutputs((prev) => ({ ...prev, [format]: data.output }));
+        setLoading(false);
+      }
+
+      if (data.status === "error") {
+        clearInterval(interval);
+        alert("Erreur traitement.");
+        setLoading(false);
+      }
+    }, 3000);
 
       clearTimeout(timeoutId);
 
