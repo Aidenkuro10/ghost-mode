@@ -86,6 +86,7 @@ export default function Home() {
   const [showPricing, setShowPricing] = useState(false);
   const [copyStatus, setCopyStatus] = useState(false);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
+  const [youtubeUrl, setYoutubeUrl] = useState("");
 
   const t = TRANSLATIONS[language];
   const formats = getFormats(language);
@@ -116,10 +117,14 @@ export default function Home() {
 
     setLoading(true);
     const formData = new FormData();
-    if (file) formData.append("file", file);
-    else formData.append("text", inputText);
-    
-    formData.append("format", format);
+    if (youtubeUrl.trim()) {
+      formData.append("youtube", youtubeUrl);
+    } else if (file) {
+      formData.append("file", file);
+    } else {
+      formData.append("text", inputText);
+    }
+        formData.append("format", format);
     formData.append("tone", tone);
     formData.append("target", target);
     formData.append("language", language);
@@ -220,18 +225,63 @@ export default function Home() {
               {loading ? "..." : t.forge_btn}
             </button>
           </div>
-
           <div className="lg:col-span-4 flex flex-col gap-4">
-            <div className="bg-white rounded-[2rem] border border-[#E9ECEF] flex-1 flex flex-col shadow-sm overflow-hidden">
-                <div className="flex border-b border-[#F1F3F5] p-2 bg-[#F8F9FA]/50">
-                    <button onClick={() => setActiveTab('text')} className={`flex-1 py-2 rounded-xl text-[9px] font-bold uppercase tracking-widest ${activeTab === 'text' ? 'bg-white shadow-sm text-black' : 'opacity-30'}`}>{t.text_tab}</button>
-                    <button onClick={() => fileInputRef.current?.click()} className="flex-1 py-2 rounded-xl text-[9px] font-bold uppercase tracking-widest opacity-30 hover:opacity-100 transition-all">{t.file_tab} {currentFile && "✓"}</button>
-                    <input type="file" ref={fileInputRef} onChange={(e) => { const file = e.target.files?.[0]; if (file) { setCurrentFile(file); handleForge(file); } }} className="hidden" />
-                </div>
-                <textarea value={inputText} onChange={(e) => setInputText(e.target.value)} className="flex-1 p-8 resize-none outline-none text-base text-[#495057] font-medium leading-relaxed placeholder:text-[#ADB5BD] custom-scrollbar-light" placeholder={t.text_placeholder} />
-            </div>
-          </div>
+    <div className="bg-white rounded-[2rem] border border-[#E9ECEF] flex-1 flex flex-col shadow-sm overflow-hidden">
+      
+      {/* Onglets */}
+      <div className="flex border-b border-[#F1F3F5] p-2 bg-[#F8F9FA]/50">
+        <button
+          onClick={() => setActiveTab("text")}
+          className={`flex-1 py-2 rounded-xl text-[9px] font-bold uppercase tracking-widest ${
+            activeTab === "text"
+              ? "bg-white shadow-sm text-black"
+              : "opacity-30"
+          }`}
+        >
+          {t.text_tab}
+        </button>
 
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="flex-1 py-2 rounded-xl text-[9px] font-bold uppercase tracking-widest opacity-30 hover:opacity-100 transition-all"
+        >
+          {t.file_tab} {currentFile && "✓"}
+        </button>
+
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              setCurrentFile(file);
+              handleForge(file);
+            }
+          }}
+          className="hidden"
+        />
+      </div>
+
+      {/* Champ YouTube */}
+      <div className="p-4 border-b border-[#F1F3F5]">
+        <input
+          type="text"
+          placeholder="Lien YouTube..."
+          value={youtubeUrl}
+          onChange={(e) => setYoutubeUrl(e.target.value)}
+          className="w-full p-4 bg-[#F8F9FA] rounded-2xl border-none focus:ring-1 focus:ring-black/5 outline-none text-sm transition-all"
+        />
+      </div>
+
+      {/* Zone texte */}
+      <textarea
+        value={inputText}
+        onChange={(e) => setInputText(e.target.value)}
+        className="flex-1 p-8 resize-none outline-none text-base text-[#495057] font-medium leading-relaxed placeholder:text-[#ADB5BD] custom-scrollbar-light"
+        placeholder={t.text_placeholder}
+      />
+    </div>
+  </div>
           <div className="lg:col-span-5 flex flex-col gap-4">
             <div className="bg-white rounded-[2rem] border-2 border-[#1A1C1E] flex-1 flex flex-col shadow-2xl relative overflow-hidden">
                 {loading ? (

@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import ytdlp from "yt-dlp-exec";
+import ffmpegPath from "ffmpeg-static";
+import { execFile } from "child_process";
+import { promisify } from "util";
+import fs from "fs";
+import path from "path";
+
+const execFileAsync = promisify(execFile);
 
 // Utilisation de pdf-extraction pour la compatibilité Turbopack et Next.js
 const pdf = require("pdf-extraction");
@@ -113,6 +121,7 @@ RÈGLES : Pas de paliers fixes (ex: évite 00:10, 00:20). Varie les durées pour
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
+    const youtubeUrl = formData.get("youtube") as string | null;
 
     const file = formData.get("file") as File | null;
     const textInput = formData.get("text") as string | null;
@@ -131,6 +140,41 @@ export async function POST(req: Request) {
     // ---------- ÉTAPE 0 : ACQUISITION (Texte ou Fichier) ----------
     if (textInput && textInput.trim() !== "") {
       rawText = textInput.trim();
+    } else if (youtubeUrl && youtubeUrl.trim() !== "") {
+      const tempDir = "/tmp";
+      const outputPath = path.join(tempDir, `audio-${Date.now()}.mp3`);
+
+      // 1️⃣ Télécharger seulement l'audio
+      await ytdlp(youtubeUrl, {
+        extractAudio: true,
+        audioFormat: "mp3",
+        output: outputPath,
+      });
+
+      // 2️⃣ Vérifier taille
+      const stats = fs.statSync(outputPath);
+      const maxSize = 24 * 1024 * 1024; // 24MB sécurité
+
+      if (stats.size > maxSize) {
+        throw new Error("Audio trop volumineux pour transcription.");
+      }
+
+      // 3️⃣ Envoyer à Whisper
+      const audioFile = new File(
+        [fs.readFileSync(outputPath)],
+        "youtube.mp3",
+        { type: "audio/mpeg" }
+      );
+
+      const transcription = await openai.audio.transcriptions.create({
+        file: audioFile,
+        model: "whisper-1"
+      });
+
+      rawText = transcription.text?.trim() || "";
+
+      // 4️⃣ Nettoyage
+      fs.unlinkSync(outputPath);
     } else if (file) {
       const buffer = Buffer.from(await file.arrayBuffer());
 
