@@ -1,8 +1,9 @@
-FROM node:20
+FROM node:20-bullseye
 
-# Installer ffmpeg et yt-dlp
-RUN apt-get update && apt-get install -y ffmpeg python3 python3-pip \
-  && pip3 install yt-dlp
+# Installer ffmpeg et yt-dlp directement via apt
+RUN apt-get update && \
+    apt-get install -y ffmpeg yt-dlp && \
+    apt-get clean
 
 WORKDIR /app
 
