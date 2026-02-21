@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { Supadata } from "@supadata/js";
 
+const supadata = new Supadata({
+  apiKey: process.env.SUPADATA_API_KEY as string,
+});
 // Utilisation de pdf-extraction pour la compatibilité Turbopack et Next.js
 const pdf = require("pdf-extraction");
 
@@ -116,6 +120,7 @@ export async function POST(req: Request) {
 
     const file = formData.get("file") as File | null;
     const textInput = formData.get("text") as string | null;
+    const youtubeUrl = formData.get("youtube") as string | null;
     const format = formData.get("format") as string;
     const tone = formData.get("tone") as string;
     const target = formData.get("target") as string;
@@ -130,8 +135,28 @@ export async function POST(req: Request) {
 
     // ---------- ÉTAPE 0 : ACQUISITION (Texte ou Fichier) ----------
     if (textInput && textInput.trim() !== "") {
-      rawText = textInput.trim();
-    } else if (file) {
+  rawText = textInput.trim();
+
+} else if (youtubeUrl && youtubeUrl.trim() !== "") {
+
+  const transcriptResult: any = await supadata.transcript({
+    url: youtubeUrl,
+    text: true,
+    mode: "auto",
+  });
+
+  if (transcriptResult?.jobId) {
+    throw new Error("Vidéo trop longue (async non géré).");
+  }
+
+  rawText =
+    typeof transcriptResult === "string"
+      ? transcriptResult
+      : transcriptResult?.text || "";
+
+  rawText = rawText.trim();
+
+} else if (file) {
       const buffer = Buffer.from(await file.arrayBuffer());
 
       if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
