@@ -221,7 +221,7 @@ export default function Home() {
                 {t.reset}
               </button>
             </div>
-            <button onClick={() => handleForge()} disabled={loading || (!inputText && !currentFile)} className="w-full py-5 bg-[#1A1C1E] text-white rounded-[1.5rem] font-bold text-sm hover:bg-black transition-all shadow-xl shadow-black/5 active:scale-95 disabled:opacity-20 uppercase tracking-[0.2em]">
+            <button onClick={() => handleForge()} disabled={loading || (!inputText && !currentFile && !youtubeUrl.trim())} className="w-full py-5 bg-[#1A1C1E] text-white rounded-[1.5rem] font-bold text-sm hover:bg-black transition-all shadow-xl shadow-black/5 active:scale-95 disabled:opacity-20 uppercase tracking-[0.2em]">
               {loading ? "..." : t.forge_btn}
             </button>
           </div>
